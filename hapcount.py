@@ -4,16 +4,19 @@ and read fragments.
 
 """
 import pysam
+import numpy as np
 from collections import deque, namedtuple
 from math import log10
 import sys
-
+from itertools import groupby
 import pdb
 
 # pysam's CIGAR codes
 MATCH, INS, DEL, REF_SKIP, SOFT_CLIP, HARD_CLIP, PAD, EQUAL, DIFF = range(9)
 
-AlleleCandidate = namedtuple("AlleleCandidate", ("tid", "pos", "ref", "alt", "prob"))
+SNP = namedtuple("SNP", ("tid", "pos", "ref", "alt", "prob"))
+Insertion = namedtuple("Insertion", ("tid", "pos", "seq"))
+Deletion = namedtuple("Deletion", ("tid", "pos", "width"))
 Allele = namedtuple("Allele", ("chrom", "pos", "ref", "alt"))
 Region = namedtuple("Region", ("chrom", "start", "end"))
 
@@ -44,56 +47,62 @@ def trim_softclipped(aln):
     assert(not any([op == SOFT_CLIP for op, _ in cigar]))
     return cigar
 
-def mismatches(aln, ref_seq):
+def find_mismatches(read_seq, ref_seq, tid, pos):
+    """Find mismatches between sequences. Further versions could
+    categorize these to SNPs and MNPs.
     """
-    TODO: handle indels.
+    assert(len(read_seq) == len(ref_seq))
+    mismatches = list()
+    for i, read_base in enumerate(read_seq):
+        if read_base != ref_seq[i]:
+            snp = SNP(tid, pos+i, ref=ref_seq[i], alt=read_base, prob=None)
+            mismatches.append(snp)
+    return mismatches
+
+def find_alleles(aln, ref_seq):
+    """TODO: rework so that we keep indices to active position in both
+    reference sequence and read sequence. This will allow for better
+    handling of indels.
+
+    There's three bits of state we need to maintain: (1) position in
+    reference sequence, (2) position in read sequence, and (3)
+    corresponding CIGAR operation (as this affects (1) and (2), via
+    indels).
     """
     candidates = list()
-    nmismatches = 0
-    assert(len(ref_seq) == aln.alen)
     read_seq = aln.seq[aln.qstart:aln.qend]
-    # our aligned sequence excludes soft-clipped regions, so trim
-    # these off CIGAR string.
+
+    # remove soft clips from CIGAR, since our alignment excludes these
     trim_cigar = trim_softclipped(aln)
-    if contains_indels(aln):
-        pass
-    else:
-        if len(trim_cigar) > 1:
+
+    # break up read into CIGAR parts and corresponding ref parts
+    start, ref_start = 0, aln.pos
+    cigar_parts = list()
+    for op, length in trim_cigar:
+        if op == MATCH:
+            refseq_frag = ref_seq[ref_start:ref_start+length]
+            readseq_frag = read_seq[start:start+length]
+            mm = find_mismatches(readseq_frag, refseq_frag, aln.tid, aln.pos+start)
+            candidates.extend(mm)
+            # full match; both incremented equally
+            start += length
+            ref_start += length
+        elif op == INS:
+            readseq_frag = read_seq[start:start+length]
+            ins = Insertion(aln.tid, ref_start, readseq_frag)
+            candidates.append(ins)
+            # insertion wrt ref means increment read, not ref
+            start += length
+        elif op == DEL:
+            dl = Deletion(aln.tid, ref_start, length)
+            candidates.append(dl)
+            # deletion wrt ref means increment ref, not read
+            ref_start += length
             pdb.set_trace()
-    current_op, op_len = trim_cigar.popleft()
-    cigar_pos = op_len
-    readiter = enumerate(read_seq)
-    for read_pos, read_base in readiter:
-        if read_pos > cigar_pos:
-            current_op, op_len = trim_cigar.popleft()
-            cigar_pos += op_len
-        if current_op == MATCH:
-            if read_base != ref_seq[read_pos]:
-                qual = aln.qual[read_pos]
-                candidates.append(AlleleCandidate(aln.tid,
-                                                  aln.pos+read_pos,
-                                                  ref_seq[read_pos],
-                                                  read_base, qual2prob(qual)))
-                nmismatches += 1
-        elif current_op == INS:
-            ins_seq = list()
-            for i in range(op_len):
-                read_pos, read_base = next(readiter)
-                ins_seq.append(read_base)
-            ins_seq = "".join(ins_seq)
-            pdb.set_trace()
-        elif current_op == DEL:
-            # deletion with respect to reference, remove bases from
-            # reference seq so later parts match up.
-            
-            for i in range(op_len):
-                read_pos, read_base = next(readiter)
-                ins_seq.append(read_base)
         else:
             pdb.set_trace()
-    assert(nmismatches == tagfilter(aln.tags, "NM"))
     return candidates
-
+            
 class Reference(object):
     def __init__(self, ref_file):
         self.ref = pysam.Fastafile(sys.argv[2])
@@ -128,8 +137,7 @@ class AlignmentProcessor(object):
         """
         if aln.is_unmapped:
             return None
-        ref_seq = self._curr_seq[aln.pos:aln.aend] # TODO check handling of clipping
-        candidates = mismatches(aln, ref_seq)
+        candidates = find_alleles(aln, self._curr_seq)
         if len(candidates) > 0:
             for candidate in candidates:
                 self._block_alleles.add(candidate)
