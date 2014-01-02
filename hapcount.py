@@ -1,7 +1,7 @@
 """hapcount.py -- Infer an unknown number of haplotypes from SNP data
 and read fragments.
 
-
+62,147,723
 """
 import pysam
 import numpy as np
@@ -81,7 +81,7 @@ def find_variants(aln, ref_seq):
         if op == MATCH:
             refseq_frag = ref_seq[ref_start:ref_start+length]
             readseq_frag = read_seq[start:start+length]
-            mm = find_mismatches(readseq_frag, refseq_frag, aln.tid, aln.pos+start)
+            mm = find_mismatches(readseq_frag, refseq_frag, aln.tid, ref_start)
             variants.extend(mm)
             # full match; both incremented equally
             start += length
@@ -114,8 +114,6 @@ class AlignmentProcessor(object):
         self.bam = pysam.Samfile(bam_file, "rb")
         self.ref = ref
         self.bam_file = bam_file
-        self._alignments = deque()
-        self._alleles = deque()
 
         # storing current state information
         self._curr_tid = None
@@ -125,6 +123,7 @@ class AlignmentProcessor(object):
         """Reset a current block, starting with position `pos`.
         """
         self._block_variants = set()
+        self._block_read_variants = deque()
         self._block_start = pos
         self._block_end = None
         self._block_variant_last_pos = None
@@ -138,17 +137,21 @@ class AlignmentProcessor(object):
             return None
         variants = find_variants(aln, self._curr_seq)
         if len(variants) > 0:
+            self._block_read_variants.append(variants)
+            
+            # load in set for quick membership testing
             for var in variants:
                 self._block_variants.add(var)
                 if var.pos > self._block_variant_last_pos:
-                    self._block_variant_last_pos = candidate.pos
+                    self._block_variant_last_pos = var.pos
             #pdb.set_trace()
     
     def is_block_end(self, aln):
         """Check if we can terminate the current block. We terminate if we hit
         the end of the chromosome, or if we hit a position-sorted read
-        that does not overlap any of our current alleles. Note too
-        that we can only terminate if we've hit variants.
+        that does not overlap the last (in terms of position) of
+        current alleles. Note too that we can only terminate if we've
+        hit variants.
         """
         if len(self._block_variants) == 0:
             return False
@@ -168,6 +171,9 @@ class AlignmentProcessor(object):
         
         stop = False
         for alignedread in bamstream:
+            if alignedread.is_unmapped:
+                continue
+
             assert(alignedread.pos >= last_pos)
             if self._curr_tid != alignedread.tid:
                 # done with the last chromosome, or start of first
@@ -177,12 +183,21 @@ class AlignmentProcessor(object):
                 self._curr_tid = alignedread.tid
                 # fetch chromosome sequence
                 self._curr_seq = self.ref.get_region(self.bam.getrname(self._curr_tid))
-            end = self.process_alignment(alignedread)
-            stop = self.is_block_end(alignedread)
+            
+            # only check if stop critera has been met once we process
+            # all alignments at a position (either 0, or start of
+            # region)
+            if alignedread.pos > start_pos:
+                stop = self.is_block_end(alignedread)
             if stop:
                 # now, take the candidate variants and process each
+                pdb.set_trace()
                 self.process_variants()
                 self.block_reset(alignedread.pos)
+                stop = False
+            else:
+                # alignment is within block bounds, so process
+                end = self.process_alignment(alignedread)
             last_pos = alignedread.pos
 
     def process_variants(self):
@@ -201,4 +216,4 @@ if __name__ == "__main__":
     ref = Reference(sys.argv[2])
     
     ap = AlignmentProcessor(bam_file, ref)
-    ap.run(region=Region("1", 265745000, 265747800))
+    ap.run(region=Region("1", 265744795, 265747800))
