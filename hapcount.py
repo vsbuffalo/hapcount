@@ -17,7 +17,6 @@ MATCH, INS, DEL, REF_SKIP, SOFT_CLIP, HARD_CLIP, PAD, EQUAL, DIFF = range(9)
 SNP = namedtuple("SNP", ("tid", "pos", "ref", "alt", "prob"))
 Insertion = namedtuple("Insertion", ("tid", "pos", "seq"))
 Deletion = namedtuple("Deletion", ("tid", "pos", "width"))
-Allele = namedtuple("Allele", ("chrom", "pos", "ref", "alt"))
 Region = namedtuple("Region", ("chrom", "start", "end"))
 
 def tagfilter(tags, tag):
@@ -59,7 +58,7 @@ def find_mismatches(read_seq, ref_seq, tid, pos):
             mismatches.append(snp)
     return mismatches
 
-def find_alleles(aln, ref_seq):
+def find_variants(aln, ref_seq):
     """TODO: rework so that we keep indices to active position in both
     reference sequence and read sequence. This will allow for better
     handling of indels.
@@ -69,7 +68,7 @@ def find_alleles(aln, ref_seq):
     corresponding CIGAR operation (as this affects (1) and (2), via
     indels).
     """
-    candidates = list()
+    variants = list()
     read_seq = aln.seq[aln.qstart:aln.qend]
 
     # remove soft clips from CIGAR, since our alignment excludes these
@@ -83,25 +82,25 @@ def find_alleles(aln, ref_seq):
             refseq_frag = ref_seq[ref_start:ref_start+length]
             readseq_frag = read_seq[start:start+length]
             mm = find_mismatches(readseq_frag, refseq_frag, aln.tid, aln.pos+start)
-            candidates.extend(mm)
+            variants.extend(mm)
             # full match; both incremented equally
             start += length
             ref_start += length
         elif op == INS:
             readseq_frag = read_seq[start:start+length]
             ins = Insertion(aln.tid, ref_start, readseq_frag)
-            candidates.append(ins)
+            variants.append(ins)
             # insertion wrt ref means increment read, not ref
             start += length
         elif op == DEL:
             dl = Deletion(aln.tid, ref_start, length)
-            candidates.append(dl)
+            variants.append(dl)
             # deletion wrt ref means increment ref, not read
             ref_start += length
-            pdb.set_trace()
         else:
+            # should not handle these, but worth looking at
             pdb.set_trace()
-    return candidates
+    return variants
             
 class Reference(object):
     def __init__(self, ref_file):
@@ -125,24 +124,24 @@ class AlignmentProcessor(object):
     def block_reset(self, pos):
         """Reset a current block, starting with position `pos`.
         """
-        self._block_alleles = set()
+        self._block_variants = set()
         self._block_start = pos
         self._block_end = None
-        self._block_allele_last_pos = None
+        self._block_variant_last_pos = None
         
     def process_alignment(self, aln):
         """Process an alignment: 
-        (1) compare against reference sequeunce, considering CIGAR string
-        (2) identify mismatches as allele candidates
+        (1) find variants in a single read
+        (2) register a read's variants in the current block
         """
         if aln.is_unmapped:
             return None
-        candidates = find_alleles(aln, self._curr_seq)
-        if len(candidates) > 0:
-            for candidate in candidates:
-                self._block_alleles.add(candidate)
-                if candidate.pos > self._block_allele_last_pos:
-                    self._block_allele_last_pos = candidate.pos
+        variants = find_variants(aln, self._curr_seq)
+        if len(variants) > 0:
+            for var in variants:
+                self._block_variants.add(var)
+                if var.pos > self._block_variant_last_pos:
+                    self._block_variant_last_pos = candidate.pos
             #pdb.set_trace()
     
     def is_block_end(self, aln):
@@ -151,13 +150,13 @@ class AlignmentProcessor(object):
         that does not overlap any of our current alleles. Note too
         that we can only terminate if we've hit variants.
         """
-        if len(self._block_alleles) == 0:
+        if len(self._block_variants) == 0:
             return False
         same_chrom = aln.tid == self._curr_tid
         if not same_chrom:
             return True
-        past_last_allele = aln.pos > self._block_allele_last_pos
-        return past_last_allele
+        past_last_variant = aln.pos > self._block_variant_last_pos
+        return past_last_variant
 
     def run(self, region=None):
         start_pos = 0 if region is None else region.start
@@ -181,12 +180,12 @@ class AlignmentProcessor(object):
             end = self.process_alignment(alignedread)
             stop = self.is_block_end(alignedread)
             if stop:
-                # now, take the candidate alleles and process each
-                self.process_alleles()
+                # now, take the candidate variants and process each
+                self.process_variants()
                 self.block_reset(alignedread.pos)
             last_pos = alignedread.pos
 
-    def process_alleles(self):
+    def process_variants(self):
         """After alignments have been processed and stopping point as been
         reached, process all alignments, inferring haplotypes from these.
 
