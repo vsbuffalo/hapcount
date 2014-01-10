@@ -58,7 +58,19 @@ def find_mismatches(read_seq, ref_seq, tid, pos):
             mismatches.append(snp)
     return mismatches
 
+def get_allele(aln, pos):
+    """Given an AlignedRead object and a positon tuple, return the allele
+    found in that read. This involves parsing the CIGAR string.
+    """
+    assert(not aln.is_unmapped)
+    chrom, start, end = pos
+    is_indel = start != end
+    
+    
+    
+
 def find_variants(aln, ref_seq):
+
     """TODO: rework so that we keep indices to active position in both
     reference sequence and read sequence. This will allow for better
     handling of indels.
@@ -137,8 +149,7 @@ class AlignmentProcessor(object):
             return None
         variants = find_variants(aln, self._curr_seq)
         if len(variants) > 0:
-            self._block_read_variants.append(variants)
-            
+            pdb.set_trace()
             # load in set for quick membership testing
             for var in variants:
                 self._block_variants.add(var)
@@ -169,11 +180,13 @@ class AlignmentProcessor(object):
         if region is not None:
             bamstream = bamstream.fetch(region.chrom, region.start, region.end)
         
+        mappedreads = deque()
         stop = False
         for alignedread in bamstream:
             if alignedread.is_unmapped:
                 continue
-
+            # register all reads in deque
+            mappedreads.append(alignedread)
             assert(alignedread.pos >= last_pos)
             if self._curr_tid != alignedread.tid:
                 # done with the last chromosome, or start of first
@@ -192,21 +205,27 @@ class AlignmentProcessor(object):
             if stop:
                 # now, take the candidate variants and process each
                 pdb.set_trace()
-                self.process_variants()
+                self.process_variants(mappedreads)
                 self.block_reset(alignedread.pos)
                 stop = False
+                mappedreads = deque()
             else:
                 # alignment is within block bounds, so process
                 end = self.process_alignment(alignedread)
             last_pos = alignedread.pos
 
-    def process_variants(self):
-        """After alignments have been processed and stopping point as been
-        reached, process all alignments, inferring haplotypes from these.
+    def process_variants(self, mappedreads):
+        """Once we've reached the end of a block and all variants in reads
+        have been found, we process these variants into
+        haplotypes. This involves two steps:
 
-        Our primary inference at this step is whether our site is
-        polymorphic, but this depends on how many underlying
-        haplotypes there are.
+        (1) identify true variant loci
+        (2) group into haplotypes
+
+        However, the unobserved number of haplotypes affects the
+        likelihood of a variant in a cryptic paralog.
+
+        Two dimensional gradient ascent.
 
         """
         pass
