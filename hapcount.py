@@ -46,73 +46,29 @@ def trim_softclipped(aln):
     assert(not any([op == SOFT_CLIP for op, _ in cigar]))
     return cigar
 
-def find_mismatches(read_seq, ref_seq, tid, pos):
-    """Find mismatches between sequences. Further versions could
-    categorize these to SNPs and MNPs.
+def MDTag2Variants(aln):
     """
-    assert(len(read_seq) == len(ref_seq))
-    mismatches = list()
-    for i, read_base in enumerate(read_seq):
-        if read_base != ref_seq[i]:
-            snp = SNP(tid, pos+i, ref=ref_seq[i], alt=read_base, prob=None)
-            mismatches.append(snp)
-    return mismatches
-
-def find_variants(aln, ref_seq):
-    """TODO: rework so that we keep indices to active position in both
-    reference sequence and read sequence. This will allow for better
-    handling of indels.
-
-    There's three bits of state we need to maintain: (1) position in
-    reference sequence, (2) position in read sequence, and (3)
-    corresponding CIGAR operation (as this affects (1) and (2), via
-    indels).
+    Parse an alignment's MD tag, extracting all variants.
     """
+    pdb.set_trace()
+
+def find_variants(aln):
+    """Find variants in MD tag; check they match CIGAR string and NM tag.
+    """
+    
     variants = list()
     read_seq = aln.seq[aln.qstart:aln.qend]
 
     # remove soft clips from CIGAR, since our alignment excludes these
     trim_cigar = trim_softclipped(aln)
-
-    # break up read into CIGAR parts and corresponding ref parts
-    start, ref_start = 0, aln.pos
-    cigar_parts = list()
-    for op, length in trim_cigar:
-        if op == MATCH:
-            refseq_frag = ref_seq[ref_start:ref_start+length]
-            readseq_frag = read_seq[start:start+length]
-            mm = find_mismatches(readseq_frag, refseq_frag, aln.tid, ref_start)
-            variants.extend(mm)
-            # full match; both incremented equally
-            start += length
-            ref_start += length
-        elif op == INS:
-            readseq_frag = read_seq[start:start+length]
-            ins = Insertion(aln.tid, ref_start, readseq_frag)
-            variants.append(ins)
-            # insertion wrt ref means increment read, not ref
-            start += length
-        elif op == DEL:
-            dl = Deletion(aln.tid, ref_start, length)
-            variants.append(dl)
-            # deletion wrt ref means increment ref, not read
-            ref_start += length
-        else:
-            # should not handle these, but worth looking at
-            pdb.set_trace()
+    
+    # TODO
     return variants
             
-class Reference(object):
-    def __init__(self, ref_file):
-        self.ref = pysam.Fastafile(sys.argv[2])
-        self.ref_file = ref_file
-    def get_region(self, chrom, start=None, end=None):
-        return self.ref.fetch(chrom, start, end)
-
 class AlignmentProcessor(object):
-    def __init__(self, bam_file, ref):
-        self.bam = pysam.Samfile(bam_file, "rb")
-        self.ref = ref
+    def __init__(self, bam_file):
+        self.bam = pysam.Samfile(bam_file, "r")
+        pdb.set_trace()
         self.bam_file = bam_file
 
         # storing current state information
@@ -181,8 +137,6 @@ class AlignmentProcessor(object):
                     # process end of last chromosome TODO
                     pass
                 self._curr_tid = alignedread.tid
-                # fetch chromosome sequence
-                self._curr_seq = self.ref.get_region(self.bam.getrname(self._curr_tid))
             
             # only check if stop critera has been met once we process
             # all alignments at a position (either 0, or start of
@@ -213,7 +167,6 @@ class AlignmentProcessor(object):
 
 if __name__ == "__main__":
     bam_file = sys.argv[1]
-    ref = Reference(sys.argv[2])
-    
-    ap = AlignmentProcessor(bam_file, ref)
+
+    ap = AlignmentProcessor(bam_file)
     ap.run(region=Region("1", 265744795, 265747800))
