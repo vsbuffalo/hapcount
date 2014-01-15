@@ -11,14 +11,20 @@ all: hapcount
 $(BAMTOOLS_ROOT)/lib/libbamtools.a:
 	cd $(BAMTOOLS_ROOT) && mkdir -p build && cd build && cmake .. && $(MAKE)
 
-AlignmentProcessor.o: AlignmentProcessor.cpp AlignmentProcessor.h
-	$(CC) $(CFLAGS) $(INCLUDE) -c AlignmentProcessor.cpp
+VariantProcessor.o: VariantProcessor.cpp VariantProcessor.h
+	$(CC) $(CFLAGS) $(INCLUDE) -c VariantProcessor.cpp
 
-hapcount.o: hapcount.cpp 
+hapcount.o: hapcount.cpp
 	$(CC) $(CFLAGS) $(INCLUDE) -c hapcount.cpp
 
-hapcount: hapcount.o AlignmentProcessor.o $(BAMTOOLS_ROOT)/lib/libbamtools.a
+Variant.o: Variant.cpp Variant.h
+	$(CC) $(CFLAGS) $(INCLUDE) -c Variant.cpp
+
+ReadHaplotype.o: ReadHaplotype.cpp ReadHaplotype.h
+	$(CC) $(CFLAGS) $(INCLUDE) -c ReadHaplotype.cpp
+
+hapcount: hapcount.o VariantProcessor.o ReadHaplotype.o Variant.o $(BAMTOOLS_ROOT)/lib/libbamtools.a
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $^ $(LIBS)
 
 clean:
-	rm -f hapcount.o AlignmentProcessor.o
+	rm -f hapcount hapcount.o VariantProcessor.o ReadHaplotype.o Variant.o
