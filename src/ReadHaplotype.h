@@ -8,9 +8,6 @@
 #include "ReadHaplotype.h"
 #include "Variant.h"
 
-using namespace std;
-using namespace BamTools;
-
 class ReadHaplotype {
   // The ReadHaplotype class stores a reduced representation of a BAM
   // alignment, storing information about what variants they contain
@@ -23,7 +20,7 @@ class ReadHaplotype {
 public:
   ReadHaplotype();
   ~ReadHaplotype();
-  const vector<Variant*> GetReadVariants();
+  const std::vector<Variant*> GetReadVariants();
   const Variant* GetReadVariant(pos_t pos); // a read can only have a single variant per position
   
 private:
@@ -34,7 +31,7 @@ private:
   std::string md;
   int nm;
   
-  vector<Variant*> variants; // for all variants in read
+  std::vector<Variant*> variants; // for all variants in read
 };
 
 #endif

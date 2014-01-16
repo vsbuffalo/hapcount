@@ -9,6 +9,7 @@
 #include "api/BamReader.h"
 
 using namespace BamTools;
+using namespace std;
 
 #define DEBUG(msg) std::cerr << "[debug] " << msg << endl;
 
@@ -129,7 +130,7 @@ pos_t VariantProcessor::processAlignment(const BamAlignment& alignment) {
     
     if (op->Type == 'M') {
       // can be match or mismatch; use MD tag to search for mismatches
-      // TODOHERE
+      
     }
 
     
