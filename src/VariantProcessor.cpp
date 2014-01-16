@@ -13,7 +13,7 @@ using namespace BamTools;
 #define DEBUG(msg) std::cerr << "[debug] " << msg << endl;
 
 struct MDToken {
-  enum type {isSNP, isMatch, isIndel};
+  enum type {isSNP, isMatch, isDel};
   string seq;
   int length;
   MDToken(enum MDToken::type type, string seq, unsigned int length): seq(seq), length(length) {
@@ -55,11 +55,11 @@ int TokenizeMD(const string& md, vector<MDToken>& tokens) {
     }
     
     if (*pos == '^') {
-      // Indel; gather following alpha characters
+      // Deletion; gather following alpha characters
       it = ++pos;
       pos = std::find_if_not(pos, md.end(), static_cast<int(*)(int)>(std::isalpha));
       length = std::distance(it, pos);
-      tokens.push_back(MDToken(MDToken::isIndel, string(it, pos), length));
+      tokens.push_back(MDToken(MDToken::isDel, string(it, pos), length));
       total += length;
       //DEBUG("adding " << length << " insertion '" << string(it, pos) << "' from MD tag: " << md);
       it = pos;
@@ -116,18 +116,24 @@ pos_t VariantProcessor::processAlignment(const BamAlignment& alignment) {
   alignment.GetTag("MD", md_td);
   alignment.GetTag("NM", nm_td);
   
-  // Find all variants using MD tag and CIGAR string.
-  std::vector<CigarOp>::const_iterator op;
+  // Find all variants using MD tag and CIGAR string. Note that MD
+  // only indicates deletions, since this is information that would
+  // require information from the reference.
   int md_pos = 0; // where we are in MD tag
   int cigar_pos = 0; // where we are in CIGAR string
   vector<MDToken> tokens;
   int md_length = TokenizeMD(md_td, tokens);
 
-  for (op = alignment.CigarData.begin(); op != alignment.CigarData.end(); ++op) {
+  for (std::vector<CigarOp>::const_iterator op = alignment.CigarData.begin(); op != alignment.CigarData.end(); ++op) {
+    if (op->Type == 'S') continue; // soft clipped regions skipped
+    
     if (op->Type == 'M') {
       // can be match or mismatch; use MD tag to search for mismatches
-      
+      // TODOHERE
     }
+
+    
+
   }
 
   // Load any and all variants in reads in to block_variants
