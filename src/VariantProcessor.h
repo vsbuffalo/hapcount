@@ -24,6 +24,19 @@ public:
   void blockReset(pos_t pos);
   pos_t processAlignment(const BamTools::BamAlignment& alignment);
   bool isBlockEnd(const BamTools::BamAlignment& alignment);
+  pos_t processMatchOrMismatch(const BamTools::BamAlignment& alignment, 
+			       std::vector<VariantPtr>& read_variants, 
+			       const uint32_t& op_length, const std::string& refseq, 
+			       const pos_t& refpos, const pos_t& readpos);
+  pos_t processInsertion(const BamTools::BamAlignment& alignment, 
+			 std::vector<VariantPtr>& read_variants, 
+			 const uint32_t& op_length, const std::string& refseq, 
+			 const pos_t& refpos, const pos_t& readpos);
+  pos_t processDeletion(const BamTools::BamAlignment& alignment, 
+			std::vector<VariantPtr>& read_variants, 
+			const uint32_t& op_length, const std::string& refseq, 
+			const pos_t& refpos, const pos_t& readpos);
+  void processBlockAlignments();
   int run();
   
 private:
@@ -34,13 +47,14 @@ private:
   pos_t last_aln_pos; // for ensuring everything is sorted
 
   // block-level info
-  std::set<Variant>* block_variants;
-  std::deque< std::vector<Variant> >* block_reads_variants;
-  std::deque<BamTools::BamAlignment>* block_reads; // for mapped reads
+  std::set<VariantPtr> block_variants;
+  std::deque< std::vector<VariantPtr> > block_read_variants;
+  std::deque<BamTools::BamAlignment> block_alignments; // for mapped reads
   pos_t block_start;
   pos_t block_end;
   pos_t block_last_variant_pos;
 
+  void addVariant();
 };
 
 #endif
