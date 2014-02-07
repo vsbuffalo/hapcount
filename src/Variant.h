@@ -7,7 +7,7 @@
 
 typedef long int pos_t;
 
-class Variant; 
+class Variant;
 
 // For use in containers
 typedef std::shared_ptr<Variant> VariantPtr;
@@ -26,8 +26,8 @@ class Variant {
   // TODO
   // - add comparison operator for STL Set
 public:
-  Variant(VariantType type, int32_t refid, pos_t position, unsigned int length, 
-	  double quality, std::string refseq, std::string altseq): 
+  Variant(VariantType type, int32_t refid, pos_t position, unsigned int length,
+	  double quality, std::string refseq, std::string altseq):
     type(type),
     refid(refid),
     position(position),
@@ -42,21 +42,22 @@ public:
   unsigned int length;
   double quality;
   // For SNPs; altseq for insertions too
-  std::string refseq; 
+  std::string refseq;
   std::string altseq;
 
-  void print();
-private: 
+  friend std::ostream& operator<< (std::ostream& stream, const Variant &var);
+  bool aligmentContainsThisVariant(BamTools::BamAlignment& alignment);
+private:
   Variant(const Variant&);
   Variant& operator=(const Variant&);
 };
 
-struct BedRegion {
-  std::string seqname;
-  pos_t start;
-  pos_t end;  
-  BedRegion(std::string sn, pos_t s, pos_t e)
-    :seqname(sn), start(s), end(e) {};
-};
+/* struct BedRegion { */
+/*   std::string seqname; */
+/*   pos_t start; */
+/*   pos_t end;   */
+/*   BedRegion(std::string sn, pos_t s, pos_t e) */
+/*     :seqname(sn), start(s), end(e) {}; */
+/* }; */
 
 #endif

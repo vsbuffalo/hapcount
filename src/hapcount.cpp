@@ -17,6 +17,6 @@ int main(int argc, char *argv[]) {
   ap->blockReset(); // TODO add region support
   int test = ap->run();
   cerr << "there were " << test << " BAM entries processed" << endl;
-  
+
   return 0;
 }
